@@ -5,12 +5,14 @@ import Control.Concurrent (threadDelay)
 import Control.Exception.Base (try, SomeException)
 
 import Data.IORef
+import qualified Data.Text.Lazy as L 
 import Data.Text.Lazy (pack, Text)
-import qualified Data.Text.Internal as T
+import qualified Data.Text as T
+import Data.Text (Text)
 import qualified Data.ByteString.Char8 as B
 
 import Network.HTTP
-import Network.Mail.Mime (Part, plainPart)
+import Network.Mail.Mime (Part, plainPart, Mail, Address)
 import Network.Mail.SMTP.Types 
 import Network.Mail.SMTP 
 
@@ -38,31 +40,45 @@ getIPAddress = do
 -- Mail Part : sending IP Address to my email
 -- ============================================
 
-self :: String -> Address 
-self addr = Address (Just "Self") (read addr :: T.Text)
+self :: String -> Address
+self addr = Address (Just self_text) (T.pack addr :: T.Text)
+    where
+    self_text :: T.Text
+    self_text = "Self"        
 
 packMessage :: Show a => a -> Part
-packMessage xs = plainPart (pack (show xs))
+packMessage xs = plainPart (L.pack (show xs))
         
-sendMailToSelf :: String -> String -> IO()
-sendMailToSelf addr msg = do 
-    let ml = simpleMail (self addr) [(self addr)] [] [] "Latest IP Address" [packMessage msg]
-    renderSendMailCustom "sendmail.exe" [] ml
+constructMail :: String -> Part -> Mail
+constructMail addr msg = simpleMail (self addr) [(self addr)] [] [] "Latest IP Address" [packMessage msg]        
+        
+sendMailToSelf :: String -> String -> Maybe FilePath -> IO()
+sendMailToSelf addr msg pth = do 
+    let ml = constructMail addr (packMessage msg)
+    case pth of
+        Nothing -> renderSendMail ml
+        Just v -> renderSendMailCustom v [] ml
     
 -- ============================================
 -- Handle Arguments: Produce a valid email address
 -- ============================================
-    
-handleArgs :: IO String
+
+
+handleArgs :: IO (String, Maybe String)
 handleArgs = do
-    x <- getArgs
-    if (length x) /= 1 
-        then error "Usage: \"Mail.exe youremail@domain.com\""
-        else do
-             let y = concat x
-             if isValid (B.pack y)
-                then return y 
+    xs <- getArgs
+    if length xs == 0 || length xs > 2 
+       then error "Usage: \"Mail.exe \"youremail@domain.com\" \"sendmail path (optional)\"\"" 
+       else do
+             let x = (head xs)
+             if isValid (B.pack x)
+                then do
+                     let ys = drop 1 xs
+                     case null ys of 
+                        True -> return (x, Nothing)
+                        False -> return (x, Just (head ys))
                 else error "Invalid email address" 
+             
 
 -- ============================================
 -- Main: Compare IP Address on Loop
@@ -70,13 +86,12 @@ handleArgs = do
                 
 main :: IO()
 main = do
+    (email, smpath) <-  handleArgs
     putStrLn "Commencing IP Address Notifier..."
-    email <-  handleArgs
-    initIP <- getIPAddress
-    currentIP <- newIORef initIP
-    mainloop currentIP email
+    currentIP <- newIORef "0.0.0.0"
+    mainloop currentIP email smpath
     where
-        mainloop currentIP email = do
+        mainloop currentIP email smpath = do
             putStrLn "Refreshing..."
             threadDelay (3 * 1000000) 
             newIP <- getIPAddress
@@ -85,6 +100,6 @@ main = do
                  True -> do
                          writeIORef currentIP newIP
                          putStrLn "Sending mail to self..."
-                         sendMailToSelf email newIP
-                         mainloop currentIP email
-                 False -> mainloop currentIP email
+                         sendMailToSelf email newIP smpath
+                         mainloop currentIP email smpath
+                 False -> mainloop currentIP email smpath
