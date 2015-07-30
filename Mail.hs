@@ -49,12 +49,12 @@ self addr = Address (Just self_text) (T.pack addr :: T.Text)
 packMessage :: Show a => a -> Part
 packMessage xs = plainPart (L.pack (show xs))
         
-constructMail :: String -> Part -> Mail
+constructMail :: String -> String -> Mail
 constructMail addr msg = simpleMail (self addr) [(self addr)] [] [] "Latest IP Address" [packMessage msg]        
         
 sendMailToSelf :: String -> String -> Maybe FilePath -> IO()
 sendMailToSelf addr msg pth = do 
-    let ml = constructMail addr (packMessage msg)
+    let ml = constructMail addr msg
     case pth of
         Nothing -> renderSendMail ml
         Just v -> renderSendMailCustom v [] ml
