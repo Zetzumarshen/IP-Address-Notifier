@@ -50,15 +50,9 @@ sendMailToSelf addr msg = do
     renderSendMailCustom "sendmail.exe" [] ml
     
 -- ============================================
--- Compare IP Address
+-- Handle Arguments: Produce a valid email address
 -- ============================================
-
-notSame :: Eq a => IORef a -> IORef a -> IO Bool
-notSame lastIP currentIP = do
-    x <- readIORef lastIP
-    y <- readIORef currentIP
-    return (x /= y)
-
+    
 handleArgs :: IO String
 handleArgs = do
     x <- getArgs
@@ -69,26 +63,28 @@ handleArgs = do
              if isValid (B.pack y)
                 then return y 
                 else error "Invalid email address" 
-    
+
+-- ============================================
+-- Main: Compare IP Address on Loop
+-- ============================================
+                
 main :: IO()
 main = do
     putStrLn "Commencing IP Address Notifier..."
     email <-  handleArgs
     initIP <- getIPAddress
-    lastIP <- newIORef initIP
     currentIP <- newIORef initIP
-    mainloop currentIP lastIP email
+    mainloop currentIP email
     where
-        mainloop currentIP lastIP email = do
+        mainloop currentIP email = do
             putStrLn "Refreshing..."
             threadDelay (3 * 1000000) 
             newIP <- getIPAddress
-            writeIORef currentIP newIP
-            cond <- lastIP `notSame` currentIP
-            case cond of 
+            x <- readIORef currentIP
+            case newIP /= x of 
                  True -> do
-                         writeIORef lastIP newIP
+                         writeIORef currentIP newIP
                          putStrLn "Sending mail to self..."
                          sendMailToSelf email newIP
-                         mainloop currentIP lastIP email
-                 False -> mainloop currentIP lastIP email
+                         mainloop currentIP email
+                 False -> mainloop currentIP email
